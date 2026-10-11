@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,28 @@ async def test_plt_01_agent_contract_only_exposes_two_operations(
         if method in {"get", "post", "put", "patch", "delete"}
     ]
     assert sorted(operations) == [("get", "/v1/files/{file_id}"), ("post", "/v1/render")]
+
+
+async def test_agent_contract_is_also_served_as_json(contract_client: httpx.AsyncClient) -> None:
+    """只接受 JSON 的平台用这个地址导入，避免被判成无效 Schema。"""
+    async with contract_client as client:
+        response = await client.get("/v1/openapi.agent.json")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    spec = json.loads(response.text)
+    assert set(spec["paths"]) == {"/v1/render", "/v1/files/{file_id}"}
+    assert spec["servers"][0]["url"] == "http://testserver"
+    assert "ApiKeyAuth" in spec["components"]["securitySchemes"]
+
+
+async def test_full_contract_is_also_served_as_json(contract_client: httpx.AsyncClient) -> None:
+    async with contract_client as client:
+        yaml_response = await client.get("/v1/openapi.yaml")
+        json_response = await client.get("/v1/openapi.json")
+
+    assert json_response.status_code == 200
+    assert json.loads(json_response.text) == yaml.safe_load(yaml_response.text)
 
 
 async def test_plt_02_public_base_url_is_injected_into_servers(tmp_path: Path) -> None:
