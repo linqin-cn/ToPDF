@@ -1,0 +1,653 @@
+openapi: 3.0.3
+info:
+  title: Resume PDF Renderer API
+  version: 1.0.0
+  description: |
+    将智能体提交的完整 HTML（含内联 CSS）**原样**渲染为简历样式 PDF。
+
+    核心约束：
+    - 服务端不修改、补全、重写或美化输入 HTML 的结构、内容与样式；
+    - 不执行 JavaScript，渲染期默认零外部网络（外链字体/图片/样式不会被加载，资源须内联为 data: URI）；
+    - 不提供任何 HTML 编辑类能力。
+  contact:
+    name: linqin-cn
+    url: https://github.com/linqin-cn/ToPDF
+  license:
+    name: Proprietary
+servers:
+  - url: https://pdf.example.com
+    description: 生产环境（示例域名，部署后替换）
+  - url: http://127.0.0.1:8000
+    description: 本地容器
+tags:
+  - name: render
+    description: PDF 渲染
+  - name: files
+    description: 产物下载
+  - name: ops
+    description: 运维与可观测性
+  - name: legacy
+    description: 已弃用接口，保留向后兼容
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+paths:
+  /v1/render:
+    post:
+      tags: [render]
+      operationId: renderPdfV1
+      summary: 将完整 HTML 渲染为 PDF
+      description: |
+        接收完整 HTML 并渲染为 PDF。响应形态由 `response_mode` 与 `Accept` 共同决定，`Accept: application/pdf` 优先。
+
+        页面参数优先级：未传 `page.*` 时尊重 HTML 内 `@page`；传入任一页面参数时以入参为准覆盖 `@page` 尺寸与边距。两种情况都不会改动 HTML 本身。
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/AcceptPdf'
+      requestBody:
+        required: true
+        description: |
+          `application/json` 为推荐格式；兼容 `application/x-www-form-urlencoded` 与 `multipart/form-data`。
+          表单提交时使用扁平键：`html`、`file_name`、`page_size`、`page_orientation`、`page_margin`、
+          `page_media`、`page_print_background`、`timeout_ms`、`max_pages`、`response_mode`、`artifact_ttl_seconds`。
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderRequest'
+            examples:
+              resume:
+                summary: 标准简历渲染
+                value:
+                  html: "<html><head><style>@page{size:A4;margin:12mm}body{font-family:'Noto Sans CJK SC'}</style></head><body><h1>张三</h1><p>Java 后端实习生</p></body></html>"
+                  file_name: "张三-简历.pdf"
+                  page:
+                    size: A4
+                    orientation: portrait
+                    margin: 12mm
+                    media: print
+                    print_background: true
+                  timeout_ms: 20000
+              minimal:
+                summary: 最小请求
+                value:
+                  html: "<h1>张三</h1>"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RenderRequestForm'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RenderRequestForm'
+      responses:
+        '200':
+          description: |
+            渲染成功。`response_mode=url`（默认）或 `Accept: application/json` 时返回 JSON；
+            `response_mode=binary` 或 `Accept: application/pdf` 时返回 PDF 二进制流。
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            X-Render-Duration-Ms:
+              $ref: '#/components/headers/RenderDurationMs'
+            X-Page-Count:
+              $ref: '#/components/headers/PageCount'
+            Content-Disposition:
+              schema:
+                type: string
+              description: 仅二进制响应返回，形如 `attachment; filename="resume.pdf"; filename*=UTF-8''%E5%BC%A0%E4%B8%89.pdf`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderSuccessResponse'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableOutput'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/RenderFailed'
+        '503':
+          $ref: '#/components/responses/ServiceBusy'
+        '504':
+          $ref: '#/components/responses/RenderTimeout'
+  /v1/files/{file_id}:
+    get:
+      tags: [files]
+      operationId: downloadArtifact
+      summary: 下载已生成的 PDF
+      parameters:
+        - name: file_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{16,64}$'
+        - name: exp
+          in: query
+          required: false
+          description: 签名模式（`DOWNLOAD_URL_MODE=signed`）下的过期时间戳（Unix 秒）
+          schema:
+            type: integer
+            format: int64
+        - name: sig
+          in: query
+          required: false
+          description: 签名模式下的 HMAC-SHA256 签名（hex）
+          schema:
+            type: string
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: PDF 二进制流
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '304':
+          description: 内容未修改（`If-None-Match` 命中 ETag）
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FileNotFound'
+        '410':
+          $ref: '#/components/responses/FileExpired'
+  /render:
+    post:
+      tags: [legacy]
+      operationId: renderPdfLegacy
+      deprecated: true
+      summary: 旧版渲染接口（已弃用）
+      description: |
+        行为等价于 `POST /v1/render` 且 `response_mode=url`、页面参数取默认值。
+        成功响应保留原有字段并追加 `request_id`、`page_count`、`duration_ms`；错误响应在原结构上追加 `code` 与 `request_id`。
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LegacyRenderRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LegacyRenderRequest'
+      responses:
+        '200':
+          description: 渲染成功
+          headers:
+            Deprecation:
+              schema:
+                type: string
+              description: 固定为 `true`
+            Link:
+              schema:
+                type: string
+              description: 指向后继接口的链接
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyRenderSuccessResponse'
+        '400':
+          $ref: '#/components/responses/InvalidArgument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/RenderFailed'
+        '504':
+          $ref: '#/components/responses/RenderTimeout'
+  /healthz:
+    get:
+      tags: [ops]
+      operationId: healthz
+      summary: 存活探针
+      security: []
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /readyz:
+    get:
+      tags: [ops]
+      operationId: readyz
+      summary: 就绪探针
+      security: []
+      responses:
+        '200':
+          description: 渲染引擎可用且产物目录可写
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: 依赖不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+  /metrics:
+    get:
+      tags: [ops]
+      operationId: metrics
+      summary: Prometheus 指标
+      description: 'METRICS_ENABLED=false 时返回 404。'
+      security: []
+      responses:
+        '200':
+          description: Prometheus 文本格式指标
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: 指标端点已关闭
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: 调用方自定义链路 ID，需匹配 `^[A-Za-z0-9._-]{1,64}$`；不合法时服务端忽略并使用自生成值。
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9._-]{1,64}$'
+    AcceptPdf:
+      name: Accept
+      in: header
+      required: false
+      description: 传 `application/pdf` 时返回二进制流，优先于 `response_mode`。
+      schema:
+        type: string
+        enum: [application/json, application/pdf]
+  headers:
+    RequestId:
+      schema:
+        type: string
+      description: 服务端回显或生成的链路 ID
+    RenderDurationMs:
+      schema:
+        type: integer
+      description: 渲染耗时（毫秒），不含排队等待
+    PageCount:
+      schema:
+        type: integer
+      description: PDF 页数
+  responses:
+    InvalidArgument:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidMargin:
+              value:
+                success: false
+                code: INVALID_ARGUMENT
+                message: page.margin 超出允许范围
+                request_id: b7d1f0c2a1e34f8f9a1c2d3e4f5a6b7c
+                details:
+                  - field: page.margin.top
+                    reason: must be <= 50
+    Unauthorized:
+      description: 鉴权失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: 请求体或 HTML 超过上限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            htmlTooLarge:
+              value:
+                success: false
+                code: PAYLOAD_TOO_LARGE
+                message: html 超过大小上限 2097152 字节
+                request_id: b7d1f0c2a1e34f8f9a1c2d3e4f5a6b7c
+                details:
+                  - field: html
+                    reason: 'limit_bytes=2097152, actual_bytes=3145728'
+    UnsupportedMediaType:
+      description: 不支持的 Content-Type
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    UnprocessableOutput:
+      description: 输出超出限制（页数过多或体积过大）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            tooManyPages:
+              value:
+                success: false
+                code: PDF_TOO_MANY_PAGES
+                message: 输出页数超过上限
+                request_id: b7d1f0c2a1e34f8f9a1c2d3e4f5a6b7c
+                details:
+                  - field: max_pages
+                    reason: 'limit=20, actual=27'
+    RateLimited:
+      description: 触发限流
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 建议退避秒数
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RenderTimeout:
+      description: 渲染超时
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RenderFailed:
+      description: 渲染失败或未预期内部错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceBusy:
+      description: 服务繁忙或引擎不可用
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FileNotFound:
+      description: 产物不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    FileExpired:
+      description: 产物已过期
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    RenderRequest:
+      type: object
+      required: [html]
+      additionalProperties: false
+      properties:
+        html:
+          type: string
+          minLength: 1
+          description: 完整 HTML 文档字符串（含内联 CSS）。服务端原样渲染，不做任何改写。
+        file_name:
+          type: string
+          default: resume.pdf
+          maxLength: 128
+          description: 下载文件名，将被白名单净化并自动补 `.pdf`。
+        page:
+          $ref: '#/components/schemas/PageOptions'
+        timeout_ms:
+          type: integer
+          default: 20000
+          minimum: 1000
+          maximum: 30000
+          description: 渲染硬超时（含排队等待）。
+        max_pages:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 100
+        response_mode:
+          type: string
+          default: url
+          enum: [url, binary]
+        artifact_ttl_seconds:
+          type: integer
+          default: 3600
+          minimum: 60
+          maximum: 604800
+          description: 产物有效期，仅 `response_mode=url` 有意义。
+    RenderRequestForm:
+      type: object
+      required: [html]
+      properties:
+        html:
+          type: string
+        file_name:
+          type: string
+        page_size:
+          type: string
+        page_orientation:
+          type: string
+          enum: [portrait, landscape]
+        page_margin:
+          type: string
+        page_media:
+          type: string
+          enum: [print, screen]
+        page_print_background:
+          type: string
+          enum: ['true', 'false']
+        timeout_ms:
+          type: integer
+        max_pages:
+          type: integer
+        response_mode:
+          type: string
+          enum: [url, binary]
+        artifact_ttl_seconds:
+          type: integer
+    LegacyRenderRequest:
+      type: object
+      required: [html]
+      properties:
+        html:
+          type: string
+        file_name:
+          type: string
+          default: resume.pdf
+    PageOptions:
+      type: object
+      additionalProperties: false
+      description: 页面参数通过渲染引擎选项下达，不会注入或改动 HTML。
+      properties:
+        size:
+          type: string
+          enum: [A4, A3, A5, Letter, Legal, Tabloid, Custom]
+          description: 未提供时由 HTML `@page` 决定，缺省回退 A4；取 Custom 时必须同时提供 width 与 height。
+        width:
+          type: number
+          minimum: 10
+          maximum: 2000
+          description: 仅 size=Custom 时生效，单位由 unit 指定。
+        height:
+          type: number
+          minimum: 10
+          maximum: 2000
+          description: 仅 size=Custom 时生效，单位由 unit 指定。
+        unit:
+          type: string
+          default: mm
+          enum: [px, mm, cm, in, pt]
+          description: width、height 与数字型边距的单位。
+        orientation:
+          type: string
+          default: portrait
+          enum: [portrait, landscape]
+        margin:
+          type: string
+          default: '0'
+          description: CSS 风格简写，如 `0`、`12mm`、`10mm 15mm`、`5mm 10mm 5mm 10mm`；裸数字按 unit 解释；单项上限 50mm。
+          example: 12mm
+        media:
+          type: string
+          default: print
+          enum: [print, screen]
+        print_background:
+          type: boolean
+          default: true
+    RenderSuccessResponse:
+      type: object
+      required: [success, request_id, file_name, file_url, page_count, size_bytes]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        request_id:
+          type: string
+        file_id:
+          type: string
+        file_name:
+          type: string
+        file_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        page_count:
+          type: integer
+        size_bytes:
+          type: integer
+        duration_ms:
+          type: integer
+        engine:
+          type: string
+          enum: [chromium, weasyprint]
+    LegacyRenderSuccessResponse:
+      type: object
+      required: [success, file_name, file_url, message]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        file_name:
+          type: string
+        file_url:
+          type: string
+          format: uri
+        message:
+          type: string
+          example: PDF 已生成
+        request_id:
+          type: string
+        page_count:
+          type: integer
+        duration_ms:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [success, code, message, request_id]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          description: 面向调用方的安全措辞，不含堆栈、路径与库版本信息。
+        request_id:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+    ErrorDetail:
+      type: object
+      required: [reason]
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+    ErrorCode:
+      type: string
+      description: 封闭错误码集合，新增需同步文档与测试。
+      enum:
+        - UNAUTHORIZED
+        - INVALID_ARGUMENT
+        - INVALID_JSON
+        - UNSUPPORTED_MEDIA_TYPE
+        - PAYLOAD_TOO_LARGE
+        - RATE_LIMITED
+        - SERVICE_BUSY
+        - RENDER_TIMEOUT
+        - RENDER_FAILED
+        - PDF_TOO_MANY_PAGES
+        - RENDER_OUTPUT_TOO_LARGE
+        - FILE_NOT_FOUND
+        - FILE_EXPIRED
+        - ENGINE_UNAVAILABLE
+        - INTERNAL_ERROR
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        version:
+          type: string
+        uptime_s:
+          type: number
+    ReadyResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        checks:
+          type: object
+          properties:
+            engine:
+              type: string
+              enum: [ok, error]
+            storage:
+              type: string
+              enum: [ok, error]
+        detail:
+          type: string
