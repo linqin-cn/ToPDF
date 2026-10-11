@@ -56,7 +56,14 @@ def test_content_disposition_encodes_rfc5987() -> None:
     header = content_disposition("张三.pdf")
 
     assert header.startswith("attachment;")
-    assert 'filename="' in header
+    # 纯中文名的 ASCII 回退名落到默认值，避免出现只有扩展名的怪名字。
+    assert 'filename="resume.pdf"' in header
     assert "filename*=UTF-8''%E5%BC%A0%E4%B8%89.pdf" in header
     assert "\r" not in header
     assert "\n" not in header
+
+
+def test_content_disposition_keeps_ascii_name() -> None:
+    header = content_disposition("resume-2024.pdf")
+
+    assert 'filename="resume-2024.pdf"' in header

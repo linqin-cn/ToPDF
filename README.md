@@ -7,8 +7,9 @@ JavaScript，默认零外部网络（外链字体、图片与样式不会被加�
 
 ## 当前进度
 
-工程骨架与契约已就位，渲染能力正在按阶段落地。各阶段状态与提交计划见 docs/07-task-plan.md。
-当前阶段只提供存活探针，POST /v1/render 在 P3 阶段交付，在此之前请勿把中间提交部署到生产环境。
+功能已闭环，可作内网工具使用：渲染（`POST /v1/render`、旧 `POST /render`）、下载
+（`GET /v1/files/{file_id}`）、鉴权、限流、并发闸门、产物 TTL 清理、健康检查与基础指标。
+交付目标与阶段取舍见 docs/07-task-plan.md 第 0 节。
 
 ## 开发文档
 
@@ -37,9 +38,12 @@ python scripts/build_agent_spec.py --check
 
 ```bash
 export RPR_API_KEYS=dev-key        # 默认开启鉴权，必须配置密钥；纯内网可设 RPR_AUTH_ENABLED=false
-uv run uvicorn resume_pdf.main:create_app --factory --host 127.0.0.1 --port 8000
-curl http://127.0.0.1:8000/healthz
+export RPR_ARTIFACT_DIR=./artifacts
+uv run uvicorn resume_pdf.main:create_app --factory --app-dir src --host 127.0.0.1 --port 8000
+uv run python scripts/smoke_local.py http://127.0.0.1:8000   # 冒烟：渲染 + 下载校验
 ```
+
+渲染需要浏览器：本地首次运行先执行 `uv run playwright install chromium`。
 
 ## 容器
 

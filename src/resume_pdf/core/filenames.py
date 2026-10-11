@@ -33,8 +33,14 @@ def sanitize_file_name(value: str | None) -> str:
 
 def content_disposition(file_name: str) -> str:
     """按 RFC 5987 生成同时兼容旧客户端的 Content-Disposition。"""
-    ascii_fallback = file_name.encode("ascii", "ignore").decode("ascii").strip("._")
-    if not ascii_fallback:
-        ascii_fallback = DEFAULT_FILE_NAME
+    ascii_name = file_name.encode("ascii", "ignore").decode("ascii")
+    stem = (
+        ascii_name[: -len(PDF_EXTENSION)]
+        if ascii_name.lower().endswith(PDF_EXTENSION)
+        else ascii_name
+    )
+    stem = stem.strip("._-")
+    # 纯中文名净化后可能只剩扩展名，此时 ASCII 回退名直接用默认值。
+    ascii_fallback = f"{stem}{PDF_EXTENSION}" if stem else DEFAULT_FILE_NAME
     quoted = ascii_fallback.replace('"', "_").replace("\\", "_")
     return f"attachment; filename=\"{quoted}\"; filename*=UTF-8''{quote(file_name, safe='')}"
