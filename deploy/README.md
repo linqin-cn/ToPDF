@@ -58,3 +58,15 @@ curl -s http://127.0.0.1:8000/v1/openapi.agent.yaml | head -20   # 确认 server
 ```
 
 然后在星辰平台上「从 URL 中导入」`http://<对外地址>/v1/openapi.agent.yaml`。
+
+## 用域名访问（Nginx 反代）
+
+1. 在域名服务商为子域加 A 记录，指向服务器公网 IP（`pdf` → `47.108.20.34`）；
+   如果面板是 CDN/WAF 类型（面板里给了「接入地址/CNAME 目标」），则应加 CNAME 指向它，
+   回源地址保持 `http://47.108.20.34:8000`。
+2. 安全组放行 **80**（启用 HTTPS 再放行 443）。只放行 8000 时，域名访问进不来。
+3. 用 `deploy/nginx.conf.example` 作为 server 块：注意 `client_max_body_size` 必须不小于
+   `RPR_MAX_REQUEST_BYTES`（默认 4m），否则大 HTML 会被网关拦成 413。
+4. 把 `RPR_PUBLIC_BASE_URL` 改成 `https://pdf.linqin.space`（或 `http://pdf.linqin.space`）并重启，
+   让返回的 `file_url` 与 Schema 里的 `servers[0].url` 都用域名。
+5. 自检：`curl -I http://pdf.linqin.space/healthz`、`curl -s http://pdf.linqin.space/v1/openapi.agent.yaml | head -20`。

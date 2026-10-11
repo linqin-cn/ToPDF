@@ -29,4 +29,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
 
-CMD ["uvicorn", "resume_pdf.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# 置于 Nginx / 网关之后时，用 proxy-headers 还原真实客户端 IP（日志与按 IP 限流都要用）；
+# 该容器只应被网关访问，因此信任上游传来的 X-Forwarded-* 。
+CMD ["uvicorn", "resume_pdf.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips=*"]
