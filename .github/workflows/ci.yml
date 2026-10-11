@@ -56,7 +56,7 @@ jobs:
 
       - name: 启动容器并检查存活探针
         run: |
-          docker run -d --name rpr -p 8000:8000 resume-pdf-renderer:ci
+          docker run -d --name rpr -p 8000:8000 -e RPR_API_KEYS=ci-key resume-pdf-renderer:ci
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/healthz; then
               exit 0

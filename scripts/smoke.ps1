@@ -15,7 +15,8 @@ param(
     [string]$Image = "resume-pdf-renderer:smoke",
     [string]$Container = "rpr-smoke",
     [int]$Port = 18080,
-    [int]$WaitSeconds = 60
+    [int]$WaitSeconds = 60,
+    [string]$ApiKey = "smoke-key"
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +48,7 @@ if ($LASTEXITCODE -ne 0) { throw "镜像构建失败" }
 
 Write-Step "启动容器 $Container（端口 $Port）"
 docker rm -f $Container 2>$null | Out-Null
-docker run -d --rm --name $Container -p "${Port}:8000" $Image | Out-Null
+docker run -d --rm --name $Container -p "${Port}:8000" -e "RPR_API_KEYS=$ApiKey" $Image | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "容器启动失败" }
 
 try {

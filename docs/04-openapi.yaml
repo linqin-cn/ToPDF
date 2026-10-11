@@ -618,6 +618,7 @@ components:
         - RENDER_FAILED
         - PDF_TOO_MANY_PAGES
         - RENDER_OUTPUT_TOO_LARGE
+        - NOT_FOUND
         - FILE_NOT_FOUND
         - FILE_EXPIRED
         - ENGINE_UNAVAILABLE

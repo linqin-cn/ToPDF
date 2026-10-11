@@ -9,11 +9,12 @@ import pytest
 from fastapi import FastAPI
 
 from resume_pdf.main import create_app
+from tests.factories import make_settings
 
 
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app()
+    return create_app(make_settings())
 
 
 @pytest.fixture

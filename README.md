@@ -36,7 +36,8 @@ python scripts/build_agent_spec.py --check
 本地启动：
 
 ```bash
-uv run uvicorn resume_pdf.main:app --host 127.0.0.1 --port 8000
+export RPR_API_KEYS=dev-key        # 默认开启鉴权，必须配置密钥；纯内网可设 RPR_AUTH_ENABLED=false
+uv run uvicorn resume_pdf.main:create_app --factory --host 127.0.0.1 --port 8000
 curl http://127.0.0.1:8000/healthz
 ```
 
@@ -44,7 +45,7 @@ curl http://127.0.0.1:8000/healthz
 
 ```bash
 docker build -t resume-pdf-renderer:dev .
-docker run --rm -p 8000:8000 resume-pdf-renderer:dev
+docker run --rm -p 8000:8000 -e RPR_API_KEYS=dev-key resume-pdf-renderer:dev
 ```
 
 生产级镜像（多阶段构建、非 root、Chromium 与中文字体、资源限额）在 P6 阶段交付，

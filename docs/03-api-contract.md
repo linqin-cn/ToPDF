@@ -171,6 +171,7 @@ curl -X POST https://pdf.example.com/v1/render \
 | `RENDER_FAILED` | 500 | 渲染引擎报错（HTML 本身导致） | 检查 HTML（如超大图片、非法字体声明）；可重试一次 |
 | `PDF_TOO_MANY_PAGES` | 422 | 输出页数超 `max_pages` | 精简内容或提高 `max_pages` |
 | `RENDER_OUTPUT_TOO_LARGE` | 422 | 输出 PDF 超 `MAX_PDF_BYTES` | 精简内联资源 |
+| `NOT_FOUND` | 404 | 请求路径不存在（路由未匹配） | 检查路径拼写 |
 | `FILE_NOT_FOUND` | 404 | 产物不存在（或已被清理） | 重新渲染 |
 | `FILE_EXPIRED` | 410 | 产物超过 TTL | 重新渲染 |
 | `ENGINE_UNAVAILABLE` | 503 | 渲染引擎不可用（重建失败/依赖缺失） | 退避重试；持续则告警 |
