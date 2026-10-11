@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -11,12 +12,15 @@ from resume_pdf import __version__
 from resume_pdf.api.exception_handlers import register_exception_handlers
 from resume_pdf.api.middleware import RequestBodyLimitMiddleware, RequestContextMiddleware
 from resume_pdf.api.routers import contract as contract_router
+from resume_pdf.api.routers import files as files_router
+from resume_pdf.api.routers import ops as ops_router
 from resume_pdf.api.routers import render as render_router
 from resume_pdf.core.config import Settings, get_settings
 from resume_pdf.core.logging import configure_logging, get_logger
 from resume_pdf.core.ratelimit import TokenBucketLimiter
 from resume_pdf.render.engine import create_engine
 from resume_pdf.render.service import RenderService
+from resume_pdf.storage.cleanup import cleanup_task
 from resume_pdf.storage.local import LocalArtifactStore
 
 APP_TITLE = "Resume PDF Renderer"
@@ -52,12 +56,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await engine.start()
         except Exception as exc:
             # 引擎不可用时仍要提供健康检查与错误码，因此不阻断进程启动。
-            # 启动失败不阻断进程：/readyz 会报告不健康，渲染请求返回 503 ENGINE_UNAVAILABLE。
             logger.error("engine_start_failed", extra={"error_type": type(exc).__name__})
-        try:
+        # /readyz 会报告引擎状态，渲染请求返回 503 ENGINE_UNAVAILABLE。
+        async with cleanup_task(store, resolved.cleanup_interval_seconds):
             yield
-        finally:
-            await engine.close()
+        await engine.close()
 
     app = FastAPI(
         title=APP_TITLE,
@@ -70,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.render_service = service
     app.state.artifact_store = store
     app.state.rate_limiter = limiter
+    app.state.started_at = time.monotonic()
 
     # 先添加的在内层：请求上下文（含访问日志）位于最外层，保证限流类拒绝也被记录。
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=resolved.max_request_bytes)
@@ -77,11 +81,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(render_router.router)
+    app.include_router(files_router.router)
+    app.include_router(ops_router.router)
     app.include_router(contract_router.router)
-
-    @app.get("/healthz", tags=["ops"], summary="存活探针")
-    async def healthz() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
 
     return app
 

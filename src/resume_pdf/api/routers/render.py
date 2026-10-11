@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -35,6 +36,7 @@ from resume_pdf.core.errors import ErrorDetail, PayloadTooLargeError, Validation
 from resume_pdf.core.filenames import content_disposition, sanitize_file_name
 from resume_pdf.core.logging import get_logger
 from resume_pdf.core.request_id import get_request_id
+from resume_pdf.core.signing import sign_download
 from resume_pdf.render.engine import RenderOptions
 from resume_pdf.render.pagesize import resolve_page
 from resume_pdf.render.service import RenderService
@@ -204,6 +206,16 @@ def _iso_utc(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z")
 
 
+def _file_url(request: Request, settings: Settings, file_id: str, ttl_seconds: int) -> str:
+    """拼装下载地址；签名模式下附带 `exp` 与 `sig`，链接自带有效期。"""
+    base = public_base_url(request, settings)
+    if settings.download_url_mode != "signed":
+        return f"{base}/v1/files/{file_id}"
+    expires_at = int(time.time()) + ttl_seconds
+    signature = sign_download(file_id, expires_at, settings.signing_secret)
+    return f"{base}/v1/files/{file_id}?exp={expires_at}&sig={signature}"
+
+
 def _metric_headers(rendered_page_count: int, duration_ms: int, engine: str) -> dict[str, str]:
     return {
         "X-Page-Count": str(rendered_page_count),
@@ -285,7 +297,7 @@ async def render_pdf(
         request_id=get_request_id(),
         file_id=artifact.file_id,
         file_name=file_name,
-        file_url=f"{public_base_url(request, settings)}/v1/files/{artifact.file_id}",
+        file_url=_file_url(request, settings, artifact.file_id, limits.ttl_seconds),
         expires_at=_iso_utc(artifact.expires_at),
         page_count=rendered.page_count,
         size_bytes=artifact.byte_size,
@@ -339,7 +351,7 @@ async def render_pdf_legacy(
     )
     body = LegacyRenderSuccessResponse(
         file_name=file_name,
-        file_url=f"{public_base_url(request, settings)}/v1/files/{artifact.file_id}",
+        file_url=_file_url(request, settings, artifact.file_id, limits.ttl_seconds),
         request_id=get_request_id(),
         page_count=rendered.page_count,
         duration_ms=rendered.duration_ms,
