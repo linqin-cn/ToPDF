@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from resume_pdf.core.config import Settings
+
+FIXTURE_HTML_DIR = Path(__file__).resolve().parent / "fixtures" / "html"
+
+
+def read_fixture_html(name: str) -> str:
+    """读取黄金样例 HTML。"""
+    return (FIXTURE_HTML_DIR / name).read_text(encoding="utf-8")
 
 
 def make_settings(**overrides: object) -> Settings:

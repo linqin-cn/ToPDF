@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     max_html_bytes: int = Field(default=2 * 1024 * 1024, ge=1024)
     hard_max_html_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
 
-    render_engine: Literal["chromium", "weasyprint"] = "chromium"
+    render_engine: Literal["chromium"] = "chromium"
     render_timeout_ms: int = Field(default=20_000, ge=1_000)
     render_max_timeout_ms: int = Field(default=30_000, ge=1_000)
     browser_recycle_after: int = Field(default=200, ge=1)

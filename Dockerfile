@@ -4,12 +4,22 @@ FROM python:3.13-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app
 
+# 中文字体与 Chromium 运行所需系统库
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# 浏览器与驱动版本由 uv.lock 锁定，避免二者漂移
+RUN python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY src ./src
 COPY docs ./docs

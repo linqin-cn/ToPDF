@@ -114,7 +114,9 @@ class RenderEngine(Protocol):
 
 ### 3.3 WeasyPrint 备选实现
 
-与 Chromium 实现同一端口、同一行为契约，仅用于「镜像体积敏感 / 需要纯 Python 部署」的场景，通过 `RENDER_ENGINE=weasyprint` 切换。资源隔离依靠自定义 `url_fetcher`（默认拒绝一切非 `data:` 请求）与 `base_url` 指向空目录。**注意**：本机 Windows 无法运行该实现，验证只在容器内进行。
+**v1 不实现**，这是一个显式取舍而非遗漏：WeasyPrint 的页面参数只能通过注入用户级 `@page` 规则生效，而「调用方显式传参要覆盖 HTML 自带 `@page`」需要作者级样式，二者语义冲突，会导致同一份契约在两种引擎下行为不一致。同时它还需要 Pango/Cairo 系统库（本机 Windows 无法运行，只能容器内验证），会把测试面翻倍。
+
+`RENDER_ENGINE` 配置项因此只接受 `chromium`，误设其它值会直接启动失败。端口 `RenderEngine` 已按可替换设计，后续若确有「纯 Python 部署」需求，再按同一行为契约补一个适配器并补齐对应测试。
 
 ## 4. 并发与资源模型
 

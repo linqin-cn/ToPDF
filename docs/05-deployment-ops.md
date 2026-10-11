@@ -19,7 +19,7 @@
 | `MAX_REQUEST_BYTES` | `4194304` | 请求体上限（4 MiB） |
 | `MAX_HTML_BYTES` | `2097152` | HTML 上限（2 MiB），不得超过 `HARD_MAX_HTML_BYTES` |
 | `HARD_MAX_HTML_BYTES` | `10485760` | 硬上限（10 MiB） |
-| `RENDER_ENGINE` | `chromium` | `chromium` 或 `weasyprint` |
+| `RENDER_ENGINE` | `chromium` | v1 只接受 `chromium`；其它取值直接启动失败，原因见 `02-architecture.md` 第 3.3 节 |
 | `RENDER_TIMEOUT_MS` / `RENDER_MAX_TIMEOUT_MS` | `20000` / `30000` | 默认与最大渲染超时 |
 | `BROWSER_RECYCLE_AFTER` | `200` | 浏览器实例在若干次渲染后主动回收 |
 | `RENDER_TMP_DIR` | `/tmp/rpr` | 请求级临时目录根 |
@@ -52,7 +52,7 @@
 
 备选方案是直接基于 `mcr.microsoft.com/playwright/python:<version>-noble`，省去系统库安装，代价是基础镜像不可控；v1 采用上面的方案，把依赖钉在自己手里。
 
-预期镜像体积 1.2–1.6 GB（Chromium + 依赖 + CJK 字体）。若体积敏感，可切 `RENDER_ENGINE=weasyprint` 省掉 Chromium（体积约 400 MB），代价是保真度下降，详见 `02-architecture.md` 第 2.1 节。
+预期镜像体积 1.2–1.6 GB（Chromium + 依赖 + CJK 字体）。这是「高保真」目标的直接成本；若未来确实无法接受，需要先补一个 WeasyPrint 适配器并接受保真度下降（见 `02-architecture.md` 第 2.1 与 3.3 节）。
 
 ## 3. 运行时加固
 
