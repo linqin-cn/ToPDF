@@ -1,66 +1,51 @@
-# Resume PDF Renderer Demo
+# Resume PDF Renderer
 
-这是一个最小可运行的第二段服务：接收工作流传来的 HTML，渲染 PDF，并把 PDF 暴露为可下载链接。
+把智能体提交的完整 HTML（含内联 CSS）原样渲染为简历样式 PDF 的服务。
 
-## 启动
+核心约束：不修改、不补全、不重写、不美化输入 HTML 的结构、内容与样式；渲染期不执行
+JavaScript，默认零外部网络（外链字体、图片与样式不会被加载，资源须内联为 data URI）。
 
-```bash
-docker build -t resume-pdf-renderer .
-docker run --rm -p 8000:8000 -e PUBLIC_BASE_URL=http://127.0.0.1:8000 resume-pdf-renderer
-```
+## 当前进度
 
-也可以直接运行：
+工程骨架与契约已就位，渲染能力正在按阶段落地。各阶段状态与提交计划见 docs/07-task-plan.md。
+当前阶段只提供存活探针，POST /v1/render 在 P3 阶段交付，在此之前请勿把中间提交部署到生产环境。
 
-```bash
-python -m pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
-```
+## 开发文档
 
-## 健康检查
+全部设计与计划文档见 docs/README.md，其中：
 
-```bash
-curl http://127.0.0.1:8000/health
-```
+- 接口契约与错误码：docs/03-api-contract.md
+- OpenAPI 3.0.3 契约：docs/04-openapi.yaml（完整版）
+- 平台导入用精简契约：docs/04-openapi.agent.yaml
+- 部署与运维：docs/05-deployment-ops.md
 
-预期返回：
+## 本地开发
 
-```json
-{"status":"ok"}
-```
-
-## 渲染测试
+需要 Python 3.13 与 uv（见 https://docs.astral.sh/uv/）。
 
 ```bash
-curl -X POST http://127.0.0.1:8000/render \
-  -H "Content-Type: application/json" \
-  -d '{
-    "file_name": "张三-Java后端实习生.pdf",
-    "html": "<html><body><h1>张三</h1><p>Java 后端实习生</p></body></html>"
-  }'
+uv sync                 # 安装依赖，含 dev 组
+uv run pytest           # 单元测试
+uv run ruff check .     # Lint
+uv run ruff format --check .
+uv run mypy             # 类型检查
+python scripts/validate_openapi.py
+python scripts/build_agent_spec.py --check
 ```
 
-响应示例：
-
-```json
-{
-  "success": true,
-  "file_name": "张三-Java后端实习生.pdf",
-  "file_url": "http://127.0.0.1:8000/files/xxx.pdf",
-  "message": "PDF 已生成"
-}
-```
-
-服务同时支持表单提交：
+本地启动：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/render \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "file_name=张三-Java后端实习生.pdf" \
-  --data-urlencode "html=<h1>张三</h1>"
+uv run uvicorn resume_pdf.main:app --host 127.0.0.1 --port 8000
+curl http://127.0.0.1:8000/healthz
 ```
 
-## 部署说明
+## 容器
 
-- 星辰工作流必须能访问这个服务的 `/render` 地址。
-- 如果星辰在云端，`127.0.0.1` 不可用，需要部署到星辰可访问的云服务器、内网或使用临时公网隧道。
-- 正式环境建议把 `OUTPUT_DIR` 换成对象存储，并在 `PUBLIC_BASE_URL` 中填写文件服务的公网域名。
+```bash
+docker build -t resume-pdf-renderer:dev .
+docker run --rm -p 8000:8000 resume-pdf-renderer:dev
+```
+
+生产级镜像（多阶段构建、非 root、Chromium 与中文字体、资源限额）在 P6 阶段交付，
+配置项清单见 docs/05-deployment-ops.md。

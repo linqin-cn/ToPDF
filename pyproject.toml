@@ -1,0 +1,82 @@
+[project]
+name = "resume-pdf-renderer"
+version = "1.0.0"
+description = "将智能体提交的完整 HTML 原样渲染为简历样式 PDF 的生产级服务"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "Proprietary" }
+dependencies = [
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "python-multipart>=0.0.20",
+    "playwright>=1.49",
+    "pypdf>=5.1",
+    "prometheus-client>=0.21",
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+]
+
+[project.optional-dependencies]
+# 备选渲染引擎。启用还需在镜像内安装 Pango/Cairo 等系统库，见 docs/02-architecture.md。
+weasyprint = ["weasyprint>=63.1"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "openapi-spec-validator>=0.7",
+    "types-pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "ASYNC", "S", "PTH", "LOG"]
+# 本项目注释与文案为中文，全角标点是刻意使用，不属于 RUF001/002/003 要拦截的歧义字符。
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"scripts/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["resume_pdf"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests", "scripts"]
+mypy_path = "src"
+warn_unused_ignores = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["openapi_spec_validator.*", "yaml.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["src/resume_pdf"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
