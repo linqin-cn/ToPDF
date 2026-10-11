@@ -10,8 +10,14 @@ from fastapi import FastAPI
 from resume_pdf import __version__
 from resume_pdf.api.exception_handlers import register_exception_handlers
 from resume_pdf.api.middleware import RequestBodyLimitMiddleware, RequestContextMiddleware
+from resume_pdf.api.routers import contract as contract_router
+from resume_pdf.api.routers import render as render_router
 from resume_pdf.core.config import Settings, get_settings
 from resume_pdf.core.logging import configure_logging, get_logger
+from resume_pdf.core.ratelimit import TokenBucketLimiter
+from resume_pdf.render.engine import create_engine
+from resume_pdf.render.service import RenderService
+from resume_pdf.storage.local import LocalArtifactStore
 
 APP_TITLE = "Resume PDF Renderer"
 APP_DESCRIPTION = (
@@ -23,9 +29,14 @@ logger = get_logger("resume_pdf.app")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """创建应用实例。渲染引擎与存储的生命周期将在后续阶段接入 lifespan。"""
+    """创建应用实例：装配进程内单例、路由与生命周期。"""
     resolved = settings or get_settings()
     configure_logging(resolved)
+
+    engine = create_engine(resolved)
+    service = RenderService(engine=engine, settings=resolved)
+    store = LocalArtifactStore(resolved.artifact_dir)
+    limiter = TokenBucketLimiter(rpm=resolved.rate_limit_rpm, burst=resolved.rate_limit_burst)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -37,7 +48,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "hint": "并发闸门与渲染实例为进程内资源，多 worker 会成倍放大实际并发",
                 },
             )
-        yield
+        try:
+            await engine.start()
+        except Exception as exc:
+            # 引擎不可用时仍要提供健康检查与错误码，因此不阻断进程启动。
+            # 启动失败不阻断进程：/readyz 会报告不健康，渲染请求返回 503 ENGINE_UNAVAILABLE。
+            logger.error("engine_start_failed", extra={"error_type": type(exc).__name__})
+        try:
+            yield
+        finally:
+            await engine.close()
 
     app = FastAPI(
         title=APP_TITLE,
@@ -46,12 +66,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = resolved
+    app.state.engine = engine
+    app.state.render_service = service
+    app.state.artifact_store = store
+    app.state.rate_limiter = limiter
 
     # 先添加的在内层：请求上下文（含访问日志）位于最外层，保证限流类拒绝也被记录。
     app.add_middleware(RequestBodyLimitMiddleware, max_bytes=resolved.max_request_bytes)
     app.add_middleware(RequestContextMiddleware)
 
     register_exception_handlers(app)
+    app.include_router(render_router.router)
+    app.include_router(contract_router.router)
 
     @app.get("/healthz", tags=["ops"], summary="存活探针")
     async def healthz() -> dict[str, str]:

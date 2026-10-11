@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        # 带 validation_alias 的字段也要允许按字段名传参（代码与测试更直观）。
+        populate_by_name=True,
     )
 
     host: str = "0.0.0.0"  # noqa: S104 - 容器内需要监听所有网卡
@@ -81,6 +83,9 @@ class Settings(BaseSettings):
     tracing_enabled: bool = False
     otel_exporter_otlp_endpoint: str = ""
     otel_service_name: str = "resume-pdf-renderer"
+
+    # 契约文件目录：相对路径按仓库根目录解析，绝对路径原样使用。
+    openapi_spec_dir: Path = Path("docs")
 
     @model_validator(mode="after")
     def _check_consistency(self) -> Settings:
