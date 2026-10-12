@@ -150,7 +150,7 @@ def test_fastapi_route_body_schema_matches_contract() -> None:
     assert set(json_schema["properties"]) == contract_properties
     assert json_schema["required"] == contract["RenderRequest"]["required"] == ["html"]
 
-    page_properties = set(contract["PageOptions"]["properties"])
+    page_properties = set(contract["RenderRequest"]["properties"]["page"]["properties"])
     assert set(json_schema["properties"]["page"]["properties"]) == page_properties
 
     form_keys = set(contract["RenderRequestForm"]["properties"])

@@ -427,7 +427,45 @@ components:
           maxLength: 128
           description: 下载文件名，将被白名单净化并自动补 `.pdf`。
         page:
-          $ref: '#/components/schemas/PageOptions'
+          type: object
+          additionalProperties: false
+          description: 页面参数通过渲染引擎选项下达，不会注入或改动 HTML。
+          properties:
+            size:
+              type: string
+              enum: [A4, A3, A5, Letter, Legal, Tabloid, Custom]
+              description: 未提供时由 HTML `@page` 决定，缺省回退 A4；取 Custom 时必须同时提供 width 与 height。
+            width:
+              type: number
+              minimum: 10
+              maximum: 2000
+              description: 仅 size=Custom 时生效，单位由 unit 指定。
+            height:
+              type: number
+              minimum: 10
+              maximum: 2000
+              description: 仅 size=Custom 时生效，单位由 unit 指定。
+            unit:
+              type: string
+              default: mm
+              enum: [px, mm, cm, in, pt]
+              description: width、height 与数字型边距的单位。
+            orientation:
+              type: string
+              default: portrait
+              enum: [portrait, landscape]
+            margin:
+              type: string
+              default: '0'
+              description: CSS 风格简写，如 `0`、`12mm`、`10mm 15mm`、`5mm 10mm 5mm 10mm`；裸数字按 unit 解释；单项上限 50mm。
+              example: 12mm
+            media:
+              type: string
+              default: print
+              enum: [print, screen]
+            print_background:
+              type: boolean
+              default: true
         timeout_ms:
           type: integer
           default: 20000
@@ -488,46 +526,6 @@ components:
         file_name:
           type: string
           default: resume.pdf
-    PageOptions:
-      type: object
-      additionalProperties: false
-      description: 页面参数通过渲染引擎选项下达，不会注入或改动 HTML。
-      properties:
-        size:
-          type: string
-          enum: [A4, A3, A5, Letter, Legal, Tabloid, Custom]
-          description: 未提供时由 HTML `@page` 决定，缺省回退 A4；取 Custom 时必须同时提供 width 与 height。
-        width:
-          type: number
-          minimum: 10
-          maximum: 2000
-          description: 仅 size=Custom 时生效，单位由 unit 指定。
-        height:
-          type: number
-          minimum: 10
-          maximum: 2000
-          description: 仅 size=Custom 时生效，单位由 unit 指定。
-        unit:
-          type: string
-          default: mm
-          enum: [px, mm, cm, in, pt]
-          description: width、height 与数字型边距的单位。
-        orientation:
-          type: string
-          default: portrait
-          enum: [portrait, landscape]
-        margin:
-          type: string
-          default: '0'
-          description: CSS 风格简写，如 `0`、`12mm`、`10mm 15mm`、`5mm 10mm 5mm 10mm`；裸数字按 unit 解释；单项上限 50mm。
-          example: 12mm
-        media:
-          type: string
-          default: print
-          enum: [print, screen]
-        print_background:
-          type: boolean
-          default: true
     RenderSuccessResponse:
       type: object
       required: [success, request_id, file_name, file_url, page_count, size_bytes]
