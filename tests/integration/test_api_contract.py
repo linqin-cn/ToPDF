@@ -55,7 +55,7 @@ async def test_full_contract_is_served_as_yaml(contract_client: httpx.AsyncClien
     assert {"/v1/render", "/v1/files/{file_id}", "/render"} <= set(spec["paths"])
 
 
-async def test_plt_01_agent_contract_only_exposes_two_operations(
+async def test_plt_01_agent_contract_only_exposes_render_operation(
     contract_client: httpx.AsyncClient,
 ) -> None:
     async with contract_client as client:
@@ -63,14 +63,14 @@ async def test_plt_01_agent_contract_only_exposes_two_operations(
 
     assert response.status_code == 200
     spec = yaml.safe_load(response.text)
-    assert set(spec["paths"]) == {"/v1/render", "/v1/files/{file_id}"}
+    assert set(spec["paths"]) == {"/v1/render"}
     operations = [
         (method, path)
         for path, item in spec["paths"].items()
         for method in item
         if method in {"get", "post", "put", "patch", "delete"}
     ]
-    assert sorted(operations) == [("get", "/v1/files/{file_id}"), ("post", "/v1/render")]
+    assert operations == [("post", "/v1/render")]
 
 
 async def test_agent_contract_is_also_served_as_json(contract_client: httpx.AsyncClient) -> None:
@@ -81,7 +81,7 @@ async def test_agent_contract_is_also_served_as_json(contract_client: httpx.Asyn
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     spec = json.loads(response.text)
-    assert set(spec["paths"]) == {"/v1/render", "/v1/files/{file_id}"}
+    assert set(spec["paths"]) == {"/v1/render"}
     assert spec["servers"][0]["url"] == "http://testserver"
     assert "ApiKeyAuth" in spec["components"]["securitySchemes"]
 

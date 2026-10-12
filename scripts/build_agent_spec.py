@@ -21,10 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PATH = ROOT / "docs" / "04-openapi.yaml"
 TARGET_PATH = ROOT / "docs" / "04-openapi.agent.yaml"
 
-AGENT_PATHS = ("/v1/render", "/v1/files/{file_id}")
+AGENT_PATHS = ("/v1/render",)
 GENERATED_HEADER = (
     "# 由 scripts/build_agent_spec.py 从 docs/04-openapi.yaml 生成，请勿手工编辑。\n"
-    "# 该文档供星辰智能体平台导入使用，只包含渲染与下载两个操作。\n"
+    "# 该文档供星辰智能体平台导入使用，只包含渲染操作。\n"
 )
 
 

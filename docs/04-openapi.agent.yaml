@@ -1,5 +1,5 @@
 # 由 scripts/build_agent_spec.py 从 docs/04-openapi.yaml 生成，请勿手工编辑。
-# 该文档供星辰智能体平台导入使用，只包含渲染与下载两个操作。
+# 该文档供星辰智能体平台导入使用，只包含渲染操作。
 openapi: 3.0.3
 info:
   title: Resume PDF Renderer API
@@ -132,59 +132,6 @@ paths:
           $ref: '#/components/responses/ServiceBusy'
         '504':
           $ref: '#/components/responses/RenderTimeout'
-  /v1/files/{file_id}:
-    get:
-      tags:
-      - files
-      operationId: downloadArtifact
-      summary: 下载已生成的 PDF
-      parameters:
-      - name: file_id
-        in: path
-        required: true
-        schema:
-          type: string
-          pattern: ^[A-Za-z0-9_-]{16,64}$
-      - name: exp
-        in: query
-        required: false
-        description: 签名模式（`DOWNLOAD_URL_MODE=signed`）下的过期时间戳（Unix 秒）
-        schema:
-          type: integer
-          format: int64
-      - name: sig
-        in: query
-        required: false
-        description: 签名模式下的 HMAC-SHA256 签名（hex）
-        schema:
-          type: string
-      - $ref: '#/components/parameters/RequestId'
-      responses:
-        '200':
-          description: PDF 二进制流
-          headers:
-            Content-Disposition:
-              schema:
-                type: string
-            ETag:
-              schema:
-                type: string
-            Cache-Control:
-              schema:
-                type: string
-          content:
-            application/pdf:
-              schema:
-                type: string
-                format: binary
-        '304':
-          description: 内容未修改（`If-None-Match` 命中 ETag）
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/FileNotFound'
-        '410':
-          $ref: '#/components/responses/FileExpired'
 components:
   headers:
     PageCount:
@@ -220,18 +167,6 @@ components:
         maxLength: 64
         pattern: ^[A-Za-z0-9._-]{1,64}$
   responses:
-    FileExpired:
-      description: 产物已过期
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    FileNotFound:
-      description: 产物不存在
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
     InvalidArgument:
       description: 参数校验失败
       content:
